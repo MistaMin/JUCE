@@ -725,14 +725,30 @@ Image juce_createIconForFile (const File& file)
     }
 }
 
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000
+ #include <dlfcn.h>
+#endif
+
 static Image createNSWindowSnapshot (NSWindow* nsWindow)
 {
     JUCE_AUTORELEASEPOOL
     {
+       #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000
+        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+        CGImageRef (*createImageFn) (CGRect, uint32_t, uint32_t, uint32_t) =
+            (CGImageRef (*) (CGRect, uint32_t, uint32_t, uint32_t)) dlsym (RTLD_DEFAULT, "CGWindowListCreateImage");
+        CGImageRef screenShot = createImageFn != nullptr
+                                    ? createImageFn (CGRectNull, kCGWindowListOptionIncludingWindow,
+                                                     (CGWindowID) [nsWindow windowNumber],
+                                                     kCGWindowImageBoundsIgnoreFraming)
+                                    : nullptr;
+        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+       #else
         CGImageRef screenShot = CGWindowListCreateImage (CGRectNull,
                                                          kCGWindowListOptionIncludingWindow,
                                                          (CGWindowID) [nsWindow windowNumber],
                                                          kCGWindowImageBoundsIgnoreFraming);
+       #endif
 
         NSBitmapImageRep* bitmapRep = [[NSBitmapImageRep alloc] initWithCGImage: screenShot];
 
