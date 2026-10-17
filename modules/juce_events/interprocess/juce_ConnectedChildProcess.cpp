@@ -101,12 +101,12 @@ private:
 struct ChildProcessCoordinator::Connection final : public InterprocessConnection,
                                                    private ChildProcessPingThread
 {
-    Connection (ChildProcessCoordinator& m, const String& pipeName, int timeout)
+    Connection (ChildProcessCoordinator& m, const String& pipeName, int readTimeout, int pingTimeout)
         : InterprocessConnection (false, magicCoordWorkerConnectionHeader),
-          ChildProcessPingThread (timeout),
+          ChildProcessPingThread (pingTimeout),
           owner (m)
     {
-        createPipe (pipeName, timeoutMs);
+        createPipe (pipeName, readTimeout);
     }
 
     ~Connection() override
@@ -164,7 +164,8 @@ bool ChildProcessCoordinator::sendMessageToWorker (const MemoryBlock& mb)
 }
 
 bool ChildProcessCoordinator::launchWorkerProcess (const File& executable, const String& commandLineUniqueID,
-                                                   int timeoutMs, int streamFlags)
+                                                   const StringArray& customArgs, int readTimeoutMs, int pingTimeoutMs,
+                                                   int streamFlags)
 {
     killWorkerProcess();
 
@@ -173,6 +174,7 @@ bool ChildProcessCoordinator::launchWorkerProcess (const File& executable, const
     StringArray args;
     args.add (executable.getFullPathName());
     args.add (getCommandLinePrefix (commandLineUniqueID) + pipeName);
+    args.addArray (customArgs);
 
     childProcess = [&]() -> std::shared_ptr<ChildProcess>
     {
@@ -189,7 +191,8 @@ bool ChildProcessCoordinator::launchWorkerProcess (const File& executable, const
 
     if (childProcess != nullptr)
     {
-        connection.reset (new Connection (*this, pipeName, timeoutMs <= 0 ? defaultTimeoutMs : timeoutMs));
+        connection.reset (new Connection (*this, pipeName, readTimeoutMs <= 0 ? defaultTimeoutMs : readTimeoutMs,
+                                          pingTimeoutMs <= 0 ? defaultTimeoutMs : pingTimeoutMs));
 
         if (connection->isConnected())
         {
@@ -213,6 +216,10 @@ void ChildProcessCoordinator::killWorkerProcess()
         connection.reset();
     }
 
+    // Avoid zombies!
+    if (childProcess != nullptr)
+        childProcess->waitForProcessToFinish (100);
+
     childProcess.reset();
 }
 
@@ -220,12 +227,12 @@ void ChildProcessCoordinator::killWorkerProcess()
 struct ChildProcessWorker::Connection final : public InterprocessConnection,
                                               private ChildProcessPingThread
 {
-    Connection (ChildProcessWorker& p, const String& pipeName, int timeout)
+    Connection (ChildProcessWorker& p, const String& pipeName, int readTimeout, int pingTimeout)
         : InterprocessConnection (false, magicCoordWorkerConnectionHeader),
-          ChildProcessPingThread (timeout),
+          ChildProcessPingThread (pingTimeout),
           owner (p)
     {
-        connectToPipe (pipeName, timeoutMs);
+        connectToPipe (pipeName, readTimeout);
     }
 
     ~Connection() override
@@ -290,7 +297,7 @@ bool ChildProcessWorker::sendMessageToCoordinator (const MemoryBlock& mb)
 
 bool ChildProcessWorker::initialiseFromCommandLine (const String& commandLine,
                                                     const String& commandLineUniqueID,
-                                                    int timeoutMs)
+                                                    int readTimeoutMs, int pingTimeoutMs)
 {
     auto prefix = getCommandLinePrefix (commandLineUniqueID);
 
@@ -301,7 +308,8 @@ bool ChildProcessWorker::initialiseFromCommandLine (const String& commandLine,
 
         if (pipeName.isNotEmpty())
         {
-            connection.reset (new Connection (*this, pipeName, timeoutMs <= 0 ? defaultTimeoutMs : timeoutMs));
+            connection.reset (new Connection (*this, pipeName, readTimeoutMs <= 0 ? defaultTimeoutMs : readTimeoutMs,
+                                              pingTimeoutMs <= 0 ? defaultTimeoutMs : pingTimeoutMs));
 
             if (connection->isConnected())
                 connection->startPinging();

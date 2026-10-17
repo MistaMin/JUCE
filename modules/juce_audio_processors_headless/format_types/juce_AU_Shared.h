@@ -406,6 +406,17 @@ struct AudioUnitHelpers
         JUCE_END_IGNORE_WARNINGS_GCC_LIKE
        #endif
 
+        // AudioGridder: allow the processor to provide its AU channel capabilities explicitly
+        if (const auto procChInfo = processor.getAUChannelInfo(); ! procChInfo.isEmpty())
+        {
+            std::set<Channels> explicitChannels;
+
+            for (const auto& pair : procChInfo)
+                explicitChannels.insert ({ static_cast<SInt16> (pair.first), static_cast<SInt16> (pair.second) });
+
+            return explicitChannels;
+        }
+
         const auto defaultInputs  = processor.getChannelCountOfBus (true,  0);
         const auto defaultOutputs = processor.getChannelCountOfBus (false, 0);
         const auto hasMainInputBus  = (AudioUnitHelpers::getBusCountForWrapper (processor, true)  > 0);

@@ -73,6 +73,7 @@
  #if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
   #include <sys/types.h>
   #include <sys/socket.h>
+  #include <sys/un.h>
 
   #if __has_include (<errno.h>)
    #include <errno.h>
