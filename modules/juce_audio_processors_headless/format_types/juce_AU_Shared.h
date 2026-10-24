@@ -401,7 +401,12 @@ struct AudioUnitHelpers
             // A MIDI effect requires an output bus in order to determine the sample rate.
             // No audio will be written to the output bus, so it can have any number of channels.
             // No input bus is required.
-            return { Channels { 0, -1 } };
+            //
+            // AudioGridder: only take this shortcut when the plug-in has no audio input bus. AudioGridder's MIDI
+            // plug-in has a 2 channel input and output bus, and reporting "no inputs" for it contradicts its default
+            // format, which makes auval fail ("Default Format of unit does not match reported Channel handling").
+            if (AudioUnitHelpers::getBusCountForWrapper (processor, true) == 0)
+                return { Channels { 0, -1 } };
         }
         JUCE_END_IGNORE_WARNINGS_GCC_LIKE
        #endif
